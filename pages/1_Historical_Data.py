@@ -44,12 +44,12 @@ data = load_data(DATA_FILE)
 if data is not None:
     # --- Sidebar Filters ---
     st.sidebar.header("Filters")
-    years = sorted(data['Year'].unique(), reverse=True)
+    years = sorted(data['Year'].dropna().unique(), reverse=True)
     selected_year = st.sidebar.selectbox("Select Year", years)
 
     filtered_data = data[data['Year'] == selected_year]
 
-    teams = sorted(filtered_data['Team'].unique())
+    teams = sorted(filtered_data['Team'].dropna().astype(str).unique())
     selected_teams = st.sidebar.multiselect("Select Teams", teams, default=teams)
 
     filtered_data = filtered_data[filtered_data['Team'].isin(selected_teams)]

@@ -26,16 +26,17 @@ def load_player_data(data_path):
     """Loads the player stats data."""
     try:
         df = pd.read_csv(data_path)
+        # Clean player names to avoid sorting errors
+        df.dropna(subset=['Player'], inplace=True)
         return df
     except FileNotFoundError:
         st.error(f"Player data not found at {data_path}.")
         return None
 
-# NOTE: You need to train a model and save it as 'ipl_auction_model.pkl'
-# For now, we'll create a placeholder.
-# Replace this with your actual model loading.
-# Example: model = load_model('ipl_auction_model.pkl')
-model = None  # Placeholder
+# Load the actual model
+model_data = load_model('ipl_auction_model.pkl')
+model = model_data['model'] if model_data else None
+le_overseas = model_data['le_overseas'] if model_data else None
 
 player_stats = load_player_data('ipl_auction_data_2013_2025.csv') # Using auction data as a stand-in for player stats
 
@@ -47,8 +48,8 @@ if player_stats is not None and model is not None:
     # --- Player Selection ---
     st.sidebar.header("Player Selection")
     
-    # Get unique player names
-    player_names = sorted(player_stats['Player'].unique())
+    # Get unique player names (ensuring they are strings)
+    player_names = sorted(player_stats['Player'].astype(str).unique())
     selected_player = st.sidebar.selectbox("Select Player", player_names)
 
     # Get stats for the selected player
@@ -62,29 +63,36 @@ if player_stats is not None and model is not None:
     # Create columns for a cleaner layout
     col1, col2 = st.columns(2)
 
-    # Example features - you will need to adjust these to match your model's features
+    # Helper to clean currency values for default inputs
+    def clean_price(price):
+        if isinstance(price, (int, float)):
+            return float(price)
+        if isinstance(price, str):
+            price = price.replace('₹', '').replace('$', '').replace(',', '').strip()
+        try:
+            return float(price)
+        except:
+            return 0.0
+
     with col1:
+        base_price = st.number_input("Base Price (in ₹)", value=clean_price(player_data.get('Base Price', 0)))
+        overseas = st.selectbox("Is Overseas Player?", options=["No", "Yes"], index=1 if player_data.get('Overseas') == 'Yes' else 0)
         runs = st.number_input("Runs Scored (last season)", value=int(player_data.get('Runs', 0)))
-        avg = st.number_input("Batting Average (last season)", value=float(player_data.get('Avg', 0.0)))
-        sr = st.number_input("Strike Rate (last season)", value=float(player_data.get('SR', 0.0)))
 
     with col2:
+        avg = st.number_input("Batting Average (last season)", value=float(player_data.get('Avg', 0.0)))
+        sr = st.number_input("Strike Rate (last season)", value=float(player_data.get('SR', 0.0)))
         wickets = st.number_input("Wickets Taken (last season)", value=int(player_data.get('Wkts', 0)))
-        econ = st.number_input("Economy Rate (last season)", value=float(player_data.get('Econ', 0.0)))
-        age = st.number_input("Player Age", value=28) # Example value
 
     # --- Prediction ---
     if st.button("Predict Price"):
+        # Encode Overseas
+        overseas_encoded = le_overseas.transform([overseas])[0]
+
         # Create a DataFrame from the input for the model
-        # IMPORTANT: The feature names here MUST match the feature names your model was trained on
         features = pd.DataFrame({
-            'Runs': [runs],
-            'Batting_Avg': [avg],
-            'Strike_Rate': [sr],
-            'Wickets': [wickets],
-            'Economy': [econ],
-            'Age': [age]
-            # Add other features your model expects
+            'Base Price': [base_price],
+            'Overseas_Encoded': [overseas_encoded]
         })
 
         try:
